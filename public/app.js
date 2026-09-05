@@ -146,7 +146,7 @@ function startProgressPoll() {
   stopProgressPoll();
   progressTimer = setInterval(async () => {
     try {
-      const p = await (await fetch("/api/import/progress")).json();
+      const p = await (await fetch("/api/import/progress", { credentials: "include" })).json();
       if (p.message) busyText.textContent = p.message;
       const parts = [];
       if (p.upserted) parts.push(`${n(p.upserted)} سطر`);
@@ -161,11 +161,14 @@ function startProgressPoll() {
 }
 
 function showView(name) {
+  if (currentUser?.role === "rep" && !["requests"].includes(name)) {
+    name = "requests";
+  }
   currentView = name;
   document.querySelectorAll(".view").forEach((el) => {
     el.hidden = el.id !== `view-${name}`;
   });
-  document.querySelectorAll(".nav-btn").forEach((btn) => {
+  document.querySelectorAll(".nav-btn[data-view]").forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.view === name);
   });
 
@@ -173,6 +176,7 @@ function showView(name) {
   if (name === "offices") loadOffices(1);
   if (name === "reps") loadReps(1);
   if (name === "numbers") loadNumbers(1);
+  if (name === "requests") loadRequests(1);
 }
 
 async function loadHome() {
@@ -180,7 +184,8 @@ async function loadHome() {
 }
 
 async function loadStats() {
-  const data = await (await fetch("/api/db/stats")).json();
+  const { res, data } = await api("/api/db/stats");
+  if (!res.ok) throw new Error(data?.error || "فشل الإحصاءات");
   cachedLineCount = Number(data.lines || 0);
   dbSourceHint.textContent = cachedLineCount
     ? `من قاعدة البيانات · ${n(data.lines)} خط · آخر استيراد: ${data.last_import_at || "—"}`
@@ -202,7 +207,8 @@ async function loadStats() {
 }
 
 async function loadBatches() {
-  const data = await (await fetch("/api/db/batches?limit=10")).json();
+  const { res, data } = await api("/api/db/batches?limit=10");
+  if (!res.ok) return;
   const rows = data.batches || [];
   if (!rows.length) {
     batchesBody.innerHTML = '<tr><td colspan="6" class="empty">لا عمليات بعد</td></tr>';
@@ -255,7 +261,8 @@ async function loadOffices(page = 1) {
     page: String(page),
     limit: "50",
   });
-  const data = await (await fetch(`/api/offices?${params}`)).json();
+  const { res, data } = await api(`/api/offices?${params}`);
+  if (!res.ok) throw new Error(data?.error || "فشل تحميل المكاتب");
   officesCache = data.offices || [];
   renderOffices(officesCache);
   const meta = $("officesMeta");
@@ -291,8 +298,7 @@ async function openOffice(id, page = 1) {
   currentPage = page;
   openDrawer();
   const params = new URLSearchParams({ status: currentStatus, page: String(page), limit: "50" });
-  const res = await fetch(`/api/offices/${id}/lines?${params}`);
-  const data = await res.json();
+  const { res, data } = await api(`/api/offices/${id}/lines?${params}`);
   if (!res.ok) throw new Error(data.error || "فشل تحميل المكتب");
 
   officeTitle.textContent = data.office.name;
@@ -334,7 +340,8 @@ async function openOffice(id, page = 1) {
 async function loadReps(page = 1) {
   repsPage = page;
   const params = new URLSearchParams({ page: String(page), limit: "50" });
-  const data = await (await fetch(`/api/representatives?${params}`)).json();
+  const { res, data } = await api(`/api/representatives?${params}`);
+  if (!res.ok) throw new Error(data?.error || "فشل تحميل المندوبين");
   const rows = data.representatives || [];
   const info = $("repsPageInfo");
   if (info) info.textContent = `${data.page} / ${data.pages} · ${n(data.total)}`;
@@ -363,6 +370,60 @@ async function loadReps(page = 1) {
     .join("");
 }
 
+function requestStatusLabel(s) {
+  return (
+    {
+      PENDING: "قيد الانتظار",
+      APPROVED: "مقبول",
+      REJECTED: "مرفوض",
+      FULFILLED: "تم التجهيز",
+    }[s] || s
+  );
+}
+
+async function loadRequests(page = 1) {
+  requestsPage = page;
+  const status = $("requestsStatus")?.value || "all";
+  const params = new URLSearchParams({ page: String(page), limit: "50", status });
+  const { res, data } = await api(`/api/prep-requests?${params}`);
+  if (!res.ok) throw new Error(data?.error || "فشل تحميل الطلبات");
+  $("requestsPageInfo").textContent = `${data.page} / ${data.pages} · ${n(data.total)}`;
+  $("requestsPrev").disabled = data.page <= 1;
+  $("requestsNext").disabled = data.page >= data.pages;
+  $("requestsMeta").textContent =
+    currentUser?.role === "rep"
+      ? "أرسل طلب تجهيز لمكتب وستظهر حالته هنا"
+      : `${n(data.total)} طلب · راجع وقبّل أو ارفض`;
+
+  if (!data.rows?.length) {
+    $("requestsBody").innerHTML = '<tr><td colspan="8" class="empty">لا طلبات</td></tr>';
+    return;
+  }
+
+  $("requestsBody").innerHTML = data.rows
+    .map((r) => {
+      const actions =
+        currentUser?.role === "admin" && r.status === "PENDING"
+          ? `<button class="btn primary" data-review="${r.id}" data-status="APPROVED" type="button">قبول</button>
+             <button class="btn ghost" data-review="${r.id}" data-status="REJECTED" type="button">رفض</button>`
+          : currentUser?.role === "admin" && r.status === "APPROVED"
+            ? `<button class="btn primary" data-review="${r.id}" data-status="FULFILLED" type="button">تم التجهيز</button>`
+            : "—";
+      return `
+      <tr>
+        <td>${r.id}</td>
+        <td>${escapeHtml(r.representative_name || "—")}</td>
+        <td>${escapeHtml(r.office_name)}</td>
+        <td>${n(r.quantity)}</td>
+        <td><span class="tag">${requestStatusLabel(r.status)}</span></td>
+        <td>${escapeHtml(r.note || "—")}</td>
+        <td>${escapeHtml(r.created_at || "—")}</td>
+        <td class="admin-only">${actions}</td>
+      </tr>`;
+    })
+    .join("");
+}
+
 async function loadNumbers(page = 1) {
   numbersPage = page;
   const params = new URLSearchParams({
@@ -371,7 +432,8 @@ async function loadNumbers(page = 1) {
     page: String(page),
     limit: "50",
   });
-  const data = await (await fetch(`/api/numbers?${params}`)).json();
+  const { res, data } = await api(`/api/numbers?${params}`);
+  if (!res.ok) throw new Error(data?.error || "فشل تحميل الأرقام");
   numbersMeta.textContent = `${n(data.total)} رقم من قاعدة البيانات`;
   numbersPageInfo.textContent = `${data.page} / ${data.pages}`;
   $("numbersPrev").disabled = data.page <= 1;
@@ -422,8 +484,7 @@ async function runImport(kind) {
   try {
     const form = new FormData();
     form.append("file", input.files[0]);
-    const res = await fetch(`/api/import/${kind}`, { method: "POST", body: form });
-    const data = await res.json();
+    const { res, data } = await api(`/api/import/${kind}`, { method: "POST", body: form });
     if (!res.ok) throw new Error(data.error || "فشل الاستيراد");
     setStatus(
       kind === "prep"
@@ -452,7 +513,7 @@ function bindFileInput(inputId, labelId) {
   });
 }
 
-document.querySelectorAll(".nav-btn").forEach((btn) => {
+document.querySelectorAll(".nav-btn[data-view]").forEach((btn) => {
   btn.addEventListener("click", () => showView(btn.dataset.view));
 });
 document.querySelectorAll("[data-go]").forEach((btn) => {
@@ -491,17 +552,22 @@ nextPage.addEventListener("click", () => currentOfficeId && openOffice(currentOf
 
 $("repForm").addEventListener("submit", async (e) => {
   e.preventDefault();
-  const res = await fetch("/api/representatives", {
+  const { res, data } = await api("/api/representatives", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       name: $("repName").value,
       phone: $("repPhone").value,
       notes: $("repNotes").value,
+      username: $("repUsername").value,
+      password: $("repPassword").value,
     }),
   });
-  const data = await res.json();
   if (!res.ok) return alert(data.error || "فشل الإضافة");
+  alert(
+    data.login
+      ? `تم إنشاء المندوب وحساب الدخول:\nالمستخدم: ${data.login.username}`
+      : "تم إنشاء المندوب"
+  );
   e.target.reset();
   loadReps(1);
 });
@@ -509,10 +575,42 @@ $("repForm").addEventListener("submit", async (e) => {
 repsBody.addEventListener("click", async (e) => {
   const btn = e.target.closest("[data-del-rep]");
   if (!btn) return;
-  if (!confirm("حذف المندوب؟")) return;
-  await fetch(`/api/representatives/${btn.dataset.delRep}`, { method: "DELETE" });
+  if (!confirm("حذف المندوب وحسابه؟")) return;
+  await api(`/api/representatives/${btn.dataset.delRep}`, { method: "DELETE" });
   loadReps(repsPage);
 });
+
+$("requestForm")?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const { res, data } = await api("/api/prep-requests", {
+    method: "POST",
+    body: JSON.stringify({
+      office_name: $("reqOffice").value,
+      quantity: $("reqQty").value,
+      note: $("reqNote").value,
+    }),
+  });
+  if (!res.ok) return alert(data.error || "فشل إرسال الطلب");
+  e.target.reset();
+  loadRequests(1);
+});
+
+$("requestsBody")?.addEventListener("click", async (e) => {
+  const btn = e.target.closest("[data-review]");
+  if (!btn) return;
+  const note = prompt("ملاحظة الإدارة (اختياري):", "") || "";
+  const { res, data } = await api(`/api/prep-requests/${btn.dataset.review}`, {
+    method: "PATCH",
+    body: JSON.stringify({ status: btn.dataset.status, admin_note: note }),
+  });
+  if (!res.ok) return alert(data.error || "فشل التحديث");
+  loadRequests(requestsPage);
+});
+
+$("requestsRefresh")?.addEventListener("click", () => loadRequests(1));
+$("requestsStatus")?.addEventListener("change", () => loadRequests(1));
+$("requestsPrev")?.addEventListener("click", () => loadRequests(requestsPage - 1));
+$("requestsNext")?.addEventListener("click", () => loadRequests(requestsPage + 1));
 
 $("numbersSearchBtn").addEventListener("click", () => loadNumbers(1));
 $("numbersQ").addEventListener("keydown", (e) => {
@@ -534,10 +632,41 @@ bindFileInput("asiaFile", "asiaFileName");
 
 $("busyClose")?.addEventListener("click", () => {
   setBusy(false);
-  setStatus("تم إغلاق شاشة الاستيراد. إذا كان الرفع ما زال على السيرفر سيكمل في الخلفية.", "ok");
+  setStatus("تم إغلاق شاشة الاستيراد.", "ok");
 });
 
-// تأكد أن الشاشة ليست عالقة عند فتح الصفحة
+$("loginForm")?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const errEl = $("loginError");
+  errEl.hidden = true;
+  const { res, data } = await api("/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify({
+      username: $("loginUser").value,
+      password: $("loginPass").value,
+    }),
+  });
+  if (!res.ok) {
+    errEl.hidden = false;
+    errEl.textContent = data?.error || "فشل الدخول";
+    return;
+  }
+  showApp(data.user);
+});
+
+$("logoutBtn")?.addEventListener("click", async () => {
+  await api("/api/auth/logout", { method: "POST" });
+  showLogin();
+});
+
 setBusy(false);
 
-showView("home");
+(async function boot() {
+  try {
+    const { res, data } = await api("/api/auth/me");
+    if (res.ok && data.user) showApp(data.user);
+    else showLogin();
+  } catch {
+    showLogin();
+  }
+})();
