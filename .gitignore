@@ -1,0 +1,9 @@
+data/
+node_modules/
+.venv/
+uploads/
+output/
+*.log
+.DS_Store
+*.db
+*.db-*

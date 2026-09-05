@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AsiePay · تتبع خطوط المكاتب</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="bg" aria-hidden="true"></div>
+
+    <section id="loginScreen" class="login-screen">
+      <form id="loginForm" class="login-card">
+        <p class="brand">AsiePay</p>
+        <h1>تسجيل الدخول</h1>
+        <p class="muted">أدمن أو مندوب</p>
+        <label>
+          اسم المستخدم
+          <input id="loginUser" name="username" autocomplete="username" required />
+        </label>
+        <label>
+          كلمة المرور
+          <input id="loginPass" name="password" type="password" autocomplete="current-password" required />
+        </label>
+        <button class="btn primary" type="submit">دخول</button>
+        <p id="loginError" class="toast" data-tone="err" hidden></p>
+        <p class="muted login-hint">الأدمن الافتراضي: admin / Admin@123</p>
+      </form>
+    </section>
+
+    <div id="appShell" hidden>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <div class="brand-block">
+          <p class="brand">AsiePay</p>
+          <span class="brand-sub" id="userBadge">—</span>
+        </div>
+        <nav class="nav" aria-label="القائمة الرئيسية">
+          <button class="nav-btn active admin-only" data-view="home" type="button">الرئيسية</button>
+          <button class="nav-btn admin-only" data-view="offices" type="button">المكاتب</button>
+          <button class="nav-btn admin-only" data-view="reps" type="button">المندوبون</button>
+          <button class="nav-btn" data-view="requests" type="button">طلبات التجهيز</button>
+          <button class="nav-btn admin-only" data-view="numbers" type="button">الأرقام</button>
+          <button class="nav-btn admin-only" data-view="import" type="button">رفع Excel</button>
+          <button id="logoutBtn" class="nav-btn" type="button">خروج</button>
+        </nav>
+      </div>
+    </header>
+
+    <main class="shell">
+      <!-- HOME -->
+      <section class="view" id="view-home">
+        <div class="intro">
+          <div>
+            <h1>لوحة المتابعة</h1>
+            <p class="lead">البيانات تُعرض من قاعدة البيانات. رفع Excel مرة واحدة فقط عند الحاجة للتحديث.</p>
+          </div>
+        </div>
+        <section id="globalStats" class="kpi-grid" aria-label="إحصاءات عامة"></section>
+        <p id="dbSourceHint" class="db-source"></p>
+        <div class="quick-grid">
+          <button class="quick-card" data-go="offices" type="button">
+            <strong>المكاتب</strong>
+            <span>عرض نقاط البيع ونسب البيع</span>
+          </button>
+          <button class="quick-card" data-go="reps" type="button">
+            <strong>المندوبون</strong>
+            <span>إدارة المندوبين وربطهم</span>
+          </button>
+          <button class="quick-card" data-go="numbers" type="button">
+            <strong>الأرقام</strong>
+            <span>بحث وتصفية كل الخطوط</span>
+          </button>
+          <button class="quick-card" data-go="import" type="button">
+            <strong>رفع Excel</strong>
+            <span>تجهيز أو ملف آسيا</span>
+          </button>
+        </div>
+        <section class="panel">
+          <div class="section-head">
+            <div>
+              <h2>آخر عمليات الاستيراد</h2>
+              <p class="muted">سجل حفظ الملفات في القاعدة</p>
+            </div>
+          </div>
+          <div class="table-scroll short">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>النوع</th>
+                  <th>الملف</th>
+                  <th>المحفوظ</th>
+                  <th>التفعيل</th>
+                  <th>الوقت</th>
+                </tr>
+              </thead>
+              <tbody id="batchesBody">
+                <tr><td colspan="6" class="empty">لا عمليات بعد</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <!-- OFFICES -->
+      <section class="view" id="view-offices" hidden>
+        <div class="section-head page-head">
+          <div>
+            <h1>المكاتب / نقاط البيع</h1>
+            <p class="muted" id="officesMeta">كل مكتب مع المستلم والمباع وغير المباع</p>
+          </div>
+          <input id="officeFilter" type="search" placeholder="بحث باسم المكتب…" />
+        </div>
+        <div class="table-scroll offices-scroll">
+          <table class="offices-table">
+            <thead>
+              <tr>
+                <th>نقطة البيع</th>
+                <th>المستلم</th>
+                <th>مباع</th>
+                <th>غير مباع</th>
+                <th>نسبة البيع</th>
+                <th>آخر تفعيل</th>
+                <th>متوسط الأيام</th>
+              </tr>
+            </thead>
+            <tbody id="officesBody">
+              <tr><td colspan="7" class="empty">جاري التحميل…</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="pager">
+          <button id="officesPrev" class="btn ghost" type="button" disabled>السابق</button>
+          <span id="officesPageInfo"></span>
+          <button id="officesNext" class="btn ghost" type="button" disabled>التالي</button>
+        </div>
+      </section>
+
+      <!-- REPS -->
+      <section class="view" id="view-reps" hidden>
+        <div class="section-head page-head">
+          <div>
+            <h1>المندوبون</h1>
+            <p class="muted">إضافة مندوب وربط الخطوط لاحقاً</p>
+          </div>
+        </div>
+        <section class="panel">
+          <form id="repForm" class="form-grid rep-form">
+            <input id="repName" required placeholder="اسم المندوب *" />
+            <input id="repPhone" placeholder="هاتف المندوب" />
+            <input id="repNotes" placeholder="ملاحظات" />
+            <input id="repUsername" required placeholder="اسم مستخدم الدخول *" />
+            <input id="repPassword" required type="password" placeholder="كلمة مرور الدخول *" />
+            <button class="btn primary" type="submit">إضافة مندوب + حساب</button>
+          </form>
+        </section>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>الاسم</th>
+                <th>الهاتف</th>
+                <th>الخطوط</th>
+                <th>مباع</th>
+                <th>غير مباع</th>
+                <th>ملاحظات</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="repsBody">
+              <tr><td colspan="7" class="empty">لا مندوبين بعد</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="pager">
+          <button id="repsPrev" class="btn ghost" type="button" disabled>السابق</button>
+          <span id="repsPageInfo"></span>
+          <button id="repsNext" class="btn ghost" type="button" disabled>التالي</button>
+        </div>
+      </section>
+
+      <!-- REQUESTS -->
+      <section class="view" id="view-requests" hidden>
+        <div class="section-head page-head">
+          <div>
+            <h1>طلبات التجهيز</h1>
+            <p class="muted" id="requestsMeta">المندوب يطلب خطوط لمكتب، والأدمن يراجع</p>
+          </div>
+        </div>
+
+        <section class="panel rep-only" id="requestCreatePanel">
+          <h2>طلب تجهيز جديد</h2>
+          <form id="requestForm" class="form-grid">
+            <input id="reqOffice" required placeholder="اسم المكتب / نقطة البيع *" />
+            <input id="reqQty" required type="number" min="1" placeholder="عدد الخطوط *" />
+            <input id="reqNote" placeholder="ملاحظة" />
+            <button class="btn primary" type="submit">إرسال الطلب</button>
+          </form>
+        </section>
+
+        <div class="filters-bar admin-only">
+          <select id="requestsStatus">
+            <option value="all">كل الحالات</option>
+            <option value="PENDING">قيد الانتظار</option>
+            <option value="APPROVED">مقبول</option>
+            <option value="REJECTED">مرفوض</option>
+            <option value="FULFILLED">تم التجهيز</option>
+          </select>
+          <button id="requestsRefresh" class="btn ghost" type="button">تحديث</button>
+        </div>
+
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>المندوب</th>
+                <th>المكتب</th>
+                <th>الكمية</th>
+                <th>الحالة</th>
+                <th>ملاحظة</th>
+                <th>التاريخ</th>
+                <th class="admin-only">إجراء</th>
+              </tr>
+            </thead>
+            <tbody id="requestsBody">
+              <tr><td colspan="8" class="empty">لا طلبات</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="pager">
+          <button id="requestsPrev" class="btn ghost" type="button" disabled>السابق</button>
+          <span id="requestsPageInfo"></span>
+          <button id="requestsNext" class="btn ghost" type="button" disabled>التالي</button>
+        </div>
+      </section>
+
+      <!-- NUMBERS -->
+      <section class="view" id="view-numbers" hidden>
+        <div class="section-head page-head">
+          <div>
+            <h1>الأرقام</h1>
+            <p class="muted" id="numbersMeta">من قاعدة البيانات</p>
+          </div>
+        </div>
+        <div class="filters-bar">
+          <input id="numbersQ" type="search" placeholder="بحث برقم / مكتب / مندوب…" />
+          <select id="numbersStatus">
+            <option value="all">كل الحالات</option>
+            <option value="unsold">غير مباع</option>
+            <option value="activated">مفعّل</option>
+            <option value="orphan">يتيم آسيا</option>
+          </select>
+          <button id="numbersSearchBtn" class="btn primary" type="button">بحث</button>
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>الهاتف</th>
+                <th>المكتب</th>
+                <th>المندوب</th>
+                <th>الحالة</th>
+                <th>التجهيز</th>
+                <th>التفعيل</th>
+                <th>الأيام</th>
+              </tr>
+            </thead>
+            <tbody id="numbersBody">
+              <tr><td colspan="7" class="empty">اضغط بحث أو غيّر الفلتر</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="pager">
+          <button id="numbersPrev" class="btn ghost" type="button" disabled>السابق</button>
+          <span id="numbersPageInfo"></span>
+          <button id="numbersNext" class="btn ghost" type="button" disabled>التالي</button>
+        </div>
+      </section>
+
+      <!-- IMPORT -->
+      <section class="view" id="view-import" hidden>
+        <div class="section-head page-head">
+          <div>
+            <h1>رفع ملفات Excel / CSV</h1>
+            <p class="muted">يُحلَّل الملف مرة واحدة عند الرفع ويُحفظ في قاعدة البيانات فقط</p>
+          </div>
+        </div>
+        <div class="import-grid">
+          <article class="import-card">
+            <div class="step-badge">1</div>
+            <div class="import-copy">
+              <h3>ملف التجهيز</h3>
+              <p>يربط كل رقم بنقطة البيع (Customer) ويحفظه كغير مباع.</p>
+            </div>
+            <label class="dropzone" for="prepFile">
+              <input id="prepFile" type="file" accept=".xlsx,.xls" hidden />
+              <strong id="prepFileName">اختر ملف Excel</strong>
+              <span>xlsx</span>
+            </label>
+            <div class="actions">
+              <button id="importPrep" class="btn primary" type="button">رفع وحفظ</button>
+            </div>
+          </article>
+          <article class="import-card">
+            <div class="step-badge">2</div>
+            <div class="import-copy">
+              <h3>ملف آسيا</h3>
+              <p>يطابق الأرقام ويحدّث تاريخ التفعيل في القاعدة.</p>
+            </div>
+            <label class="dropzone" for="asiaFile">
+              <input id="asiaFile" type="file" accept=".csv,.xlsx,.xls" hidden />
+              <strong id="asiaFileName">اختر ملف CSV / Excel</strong>
+              <span>csv أو xlsx</span>
+            </label>
+            <div class="actions">
+              <button id="importAsia" class="btn primary" type="button">رفع وحفظ</button>
+            </div>
+          </article>
+        </div>
+        <div id="status" class="toast" hidden role="status"></div>
+      </section>
+    </main>
+
+    <aside id="officeDetail" class="drawer" hidden aria-hidden="true">
+      <div class="drawer-backdrop" id="closeOfficeBackdrop"></div>
+      <div class="drawer-panel" role="dialog" aria-modal="true">
+        <div class="drawer-head">
+          <div>
+            <p class="eyebrow">تفاصيل المكتب</p>
+            <h2 id="officeTitle">—</h2>
+          </div>
+          <button id="closeOffice" class="icon-btn" type="button" aria-label="إغلاق">×</button>
+        </div>
+        <div id="officeStats" class="kpi-grid compact"></div>
+        <div class="drawer-toolbar">
+          <div class="segmented">
+            <button class="seg-btn active" data-status="all" type="button">الكل</button>
+            <button class="seg-btn" data-status="unsold" type="button">غير مباع</button>
+            <button class="seg-btn" data-status="activated" type="button">مفعّل</button>
+          </div>
+          <a id="exportOffice" class="btn primary" href="#">تصدير CSV</a>
+        </div>
+        <div class="table-scroll drawer-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>الهاتف</th>
+                <th>الحالة</th>
+                <th>التجهيز</th>
+                <th>التفعيل</th>
+                <th>الأيام</th>
+                <th>الباقة</th>
+              </tr>
+            </thead>
+            <tbody id="linesBody"></tbody>
+          </table>
+        </div>
+        <div class="pager">
+          <button id="prevPage" class="btn ghost" type="button" disabled>السابق</button>
+          <span id="pageInfo"></span>
+          <button id="nextPage" class="btn ghost" type="button" disabled>التالي</button>
+        </div>
+      </div>
+    </aside>
+    </div>
+
+    <div id="busyOverlay" class="busy" hidden>
+      <div class="busy-card">
+        <div class="spinner"></div>
+        <strong id="busyTitle">جاري الاستيراد</strong>
+        <p id="busyText">…</p>
+        <p id="busyDetail" class="busy-detail"></p>
+        <button id="busyClose" class="btn ghost" type="button">إغلاق</button>
+      </div>
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
