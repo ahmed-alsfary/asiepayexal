@@ -7,3 +7,6 @@ output/
 .DS_Store
 *.db
 *.db-*
+
+.env
+.env.local

@@ -1,7 +1,6 @@
 const path = require('path');
 const ExcelJS = require('exceljs');
 const {
-  getDb,
   createBatch,
   finishBatch,
   ensureOffice,
@@ -38,7 +37,7 @@ function cellDate(value) {
  * Import warehouse prep Excel: phone + Customer(office) + invoice date.
  */
 async function importPrepFile(filePath, { onProgress } = {}) {
-  const batchId = createBatch({
+  const batchId = await createBatch({
     type: 'prep',
     sourceFile: path.basename(filePath),
   });
@@ -57,8 +56,6 @@ async function importPrepFile(filePath, { onProgress } = {}) {
     styles: 'ignore',
     worksheets: 'emit',
   });
-
-  const runUpsert = getDb().transaction((payload) => upsertAssignedLine(payload));
 
   for await (const worksheetReader of workbook) {
     for await (const row of worksheetReader) {
@@ -92,12 +89,12 @@ async function importPrepFile(filePath, { onProgress } = {}) {
 
       let office = officeCache.get(officeName);
       if (!office) {
-        office = ensureOffice(officeName);
+        office = await ensureOffice(officeName);
         officeCache.set(officeName, office);
       }
       touchedOffices.add(office.id);
 
-      const result = runUpsert({
+      const result = await upsertAssignedLine({
         phone,
         officeId: office.id,
         itemCode,
@@ -123,7 +120,7 @@ async function importPrepFile(filePath, { onProgress } = {}) {
     offices_touched: touchedOffices.size,
     notes: `created=${created}; skipped=${skipped}`,
   };
-  finishBatch(batchId, stats);
+  await finishBatch(batchId, stats);
 
   return {
     batchId,

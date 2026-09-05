@@ -223,8 +223,72 @@ body {
   font-size: 0.82rem;
 }
 
-.rep-form {
-  grid-template-columns: 1fr 1fr 1fr;
+.request-form {
+  grid-template-columns: 1.4fr 0.7fr 1fr auto;
+  align-items: start;
+}
+
+.office-combo {
+  position: relative;
+}
+
+.office-combo input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.75rem 0.9rem;
+  font: inherit;
+  background: #fafafa;
+}
+
+.office-combo input:focus {
+  outline: 2px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  border-color: var(--accent);
+  background: #fff;
+}
+
+.office-combo-list {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 4px);
+  right: 0;
+  left: 0;
+  max-height: 240px;
+  overflow: auto;
+  margin: 0;
+  padding: 0.35rem;
+  list-style: none;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: var(--shadow);
+}
+
+.office-combo-list li {
+  padding: 0.55rem 0.7rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.92rem;
+}
+
+.office-combo-list li:hover,
+.office-combo-list li[aria-selected="true"] {
+  background: color-mix(in srgb, var(--accent) 12%, #fff);
+}
+
+.office-combo-list .empty-opt {
+  color: var(--muted);
+  cursor: default;
+}
+
+.office-combo-list .empty-opt:hover {
+  background: transparent;
+}
+
+@media (max-width: 980px) {
+  .request-form {
+    grid-template-columns: 1fr;
+  }
 }
 
 .rep-only[hidden],

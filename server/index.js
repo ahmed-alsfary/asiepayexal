@@ -55,11 +55,6 @@ const LOCAL_ASIA = path.join(
 );
 
 for (const dir of [UPLOADS]) fs.mkdirSync(dir, { recursive: true });
-getDb();
-const adminSeed = ensureDefaultAdmin();
-if (adminSeed.created) {
-  console.log(`Default admin created → username: ${DEFAULT_ADMIN.username} / password: ${DEFAULT_ADMIN.password}`);
-}
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, UPLOADS),
@@ -95,9 +90,9 @@ app.get('/api/health', (_req, res) => {
   res.json({ ok: true, db: DB_PATH });
 });
 
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', async (req, res) => {
   try {
-    const result = login(req.body?.username, req.body?.password);
+    const result = await login(req.body?.username, req.body?.password);
     if (result.error) return res.status(401).json({ error: result.error });
     setSessionCookie(res, result.token);
     res.json({ user: result.user });
@@ -106,17 +101,21 @@ app.post('/api/auth/login', (req, res) => {
   }
 });
 
-app.post('/api/auth/logout', (req, res) => {
-  logout(req.cookies?.asiepay_session);
+app.post('/api/auth/logout', async (req, res) => {
+  await logout(req.cookies?.asiepay_session);
   res.clearCookie('asiepay_session');
   res.json({ ok: true });
 });
 
-app.get('/api/auth/me', (req, res) => {
-  const { getSessionUser } = require('./auth');
-  const user = getSessionUser(req.cookies?.asiepay_session);
-  if (!user) return res.status(401).json({ error: 'غير مسجل' });
-  res.json({ user });
+app.get('/api/auth/me', async (req, res) => {
+  try {
+    const { getSessionUser } = require('./auth');
+    const user = await getSessionUser(req.cookies?.asiepay_session);
+    if (!user) return res.status(401).json({ error: 'غير مسجل' });
+    res.json({ user });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.get('/api/local-files', anyUser, (_req, res) => {
@@ -126,26 +125,26 @@ app.get('/api/local-files', anyUser, (_req, res) => {
   });
 });
 
-app.get('/api/db/stats', anyUser, (_req, res) => {
+app.get('/api/db/stats', anyUser, async (_req, res) => {
   try {
-    res.json(getDbStats());
+    res.json(await getDbStats());
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-app.get('/api/db/batches', adminOnly, (req, res) => {
+app.get('/api/db/batches', adminOnly, async (req, res) => {
   try {
-    res.json({ batches: listBatches(req.query.limit) });
+    res.json({ batches: await listBatches(req.query.limit) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-app.get('/api/offices', anyUser, (req, res) => {
+app.get('/api/offices', anyUser, async (req, res) => {
   try {
     res.json(
-      listOffices({
+      await listOffices({
         q: req.query.q || '',
         page: req.query.page,
         limit: req.query.limit,
@@ -156,9 +155,9 @@ app.get('/api/offices', anyUser, (req, res) => {
   }
 });
 
-app.patch('/api/offices/:id', adminOnly, (req, res) => {
+app.patch('/api/offices/:id', adminOnly, async (req, res) => {
   try {
-    const office = updateOffice(Number(req.params.id), req.body || {});
+    const office = await updateOffice(Number(req.params.id), req.body || {});
     if (!office) return res.status(404).json({ error: 'المكتب غير موجود' });
     res.json(office);
   } catch (err) {
@@ -166,10 +165,10 @@ app.patch('/api/offices/:id', adminOnly, (req, res) => {
   }
 });
 
-app.get('/api/representatives', adminOnly, (req, res) => {
+app.get('/api/representatives', adminOnly, async (req, res) => {
   try {
     res.json(
-      listRepresentatives({
+      await listRepresentatives({
         q: req.query.q || '',
         page: req.query.page,
         limit: req.query.limit,
@@ -180,13 +179,13 @@ app.get('/api/representatives', adminOnly, (req, res) => {
   }
 });
 
-app.post('/api/representatives', adminOnly, (req, res) => {
+app.post('/api/representatives', adminOnly, async (req, res) => {
   try {
     const body = req.body || {};
-    const row = createRepresentative(body);
+    const row = await createRepresentative(body);
     let loginUser = null;
     if (body.username && body.password) {
-      loginUser = createUserForRepresentative({
+      loginUser = await createUserForRepresentative({
         representativeId: row.id,
         username: body.username,
         password: body.password,
@@ -203,9 +202,9 @@ app.post('/api/representatives', adminOnly, (req, res) => {
   }
 });
 
-app.patch('/api/representatives/:id', adminOnly, (req, res) => {
+app.patch('/api/representatives/:id', adminOnly, async (req, res) => {
   try {
-    const row = updateRepresentative(Number(req.params.id), req.body || {});
+    const row = await updateRepresentative(Number(req.params.id), req.body || {});
     if (!row) return res.status(404).json({ error: 'المندوب غير موجود' });
     res.json(row);
   } catch (err) {
@@ -213,19 +212,19 @@ app.patch('/api/representatives/:id', adminOnly, (req, res) => {
   }
 });
 
-app.delete('/api/representatives/:id', adminOnly, (req, res) => {
+app.delete('/api/representatives/:id', adminOnly, async (req, res) => {
   try {
-    deleteRepresentative(Number(req.params.id));
+    await deleteRepresentative(Number(req.params.id));
     res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
 });
 
-app.get('/api/numbers', anyUser, (req, res) => {
+app.get('/api/numbers', anyUser, async (req, res) => {
   try {
     res.json(
-      listAllLines({
+      await listAllLines({
         q: req.query.q || '',
         status: req.query.status || 'all',
         officeId: req.query.officeId || '',
@@ -238,11 +237,11 @@ app.get('/api/numbers', anyUser, (req, res) => {
   }
 });
 
-app.get('/api/prep-requests', anyUser, (req, res) => {
+app.get('/api/prep-requests', anyUser, async (req, res) => {
   try {
     const isAdmin = req.user.role === 'admin';
     res.json(
-      listPrepRequests({
+      await listPrepRequests({
         representativeId: isAdmin ? null : req.user.representative_id,
         status: req.query.status || 'all',
         page: req.query.page,
@@ -254,12 +253,12 @@ app.get('/api/prep-requests', anyUser, (req, res) => {
   }
 });
 
-app.post('/api/prep-requests', anyUser, (req, res) => {
+app.post('/api/prep-requests', anyUser, async (req, res) => {
   try {
     if (req.user.role !== 'rep' || !req.user.representative_id) {
       return res.status(403).json({ error: 'طلبات التجهيز للمندوبين فقط' });
     }
-    const row = createPrepRequest({
+    const row = await createPrepRequest({
       representativeId: req.user.representative_id,
       officeName: req.body?.office_name || req.body?.officeName,
       quantity: req.body?.quantity,
@@ -271,9 +270,9 @@ app.post('/api/prep-requests', anyUser, (req, res) => {
   }
 });
 
-app.patch('/api/prep-requests/:id', adminOnly, (req, res) => {
+app.patch('/api/prep-requests/:id', adminOnly, async (req, res) => {
   try {
-    const row = reviewPrepRequest(Number(req.params.id), {
+    const row = await reviewPrepRequest(Number(req.params.id), {
       status: req.body?.status,
       adminNote: req.body?.admin_note || req.body?.adminNote,
       reviewedBy: req.user.id,
@@ -284,9 +283,9 @@ app.patch('/api/prep-requests/:id', adminOnly, (req, res) => {
   }
 });
 
-app.get('/api/offices/:id', anyUser, (req, res) => {
+app.get('/api/offices/:id', anyUser, async (req, res) => {
   try {
-    const office = getOffice(Number(req.params.id));
+    const office = await getOffice(Number(req.params.id));
     if (!office) return res.status(404).json({ error: 'المكتب غير موجود' });
     res.json(office);
   } catch (err) {
@@ -294,11 +293,11 @@ app.get('/api/offices/:id', anyUser, (req, res) => {
   }
 });
 
-app.get('/api/offices/:id/lines', anyUser, (req, res) => {
+app.get('/api/offices/:id/lines', anyUser, async (req, res) => {
   try {
-    const office = getOffice(Number(req.params.id));
+    const office = await getOffice(Number(req.params.id));
     if (!office) return res.status(404).json({ error: 'المكتب غير موجود' });
-    const result = listOfficeLines(Number(req.params.id), {
+    const result = await listOfficeLines(Number(req.params.id), {
       status: req.query.status || 'all',
       page: req.query.page,
       limit: req.query.limit,
@@ -310,13 +309,13 @@ app.get('/api/offices/:id/lines', anyUser, (req, res) => {
   }
 });
 
-app.get('/api/offices/:id/export.csv', anyUser, (req, res) => {
+app.get('/api/offices/:id/export.csv', anyUser, async (req, res) => {
   try {
-    const office = getOffice(Number(req.params.id));
+    const office = await getOffice(Number(req.params.id));
     if (!office) return res.status(404).json({ error: 'المكتب غير موجود' });
 
     const status = req.query.status || 'all';
-    const rows = exportOfficeLines(Number(req.params.id), { status });
+    const rows = await exportOfficeLines(Number(req.params.id), { status });
     const header = [
       'phone',
       'status',
@@ -369,10 +368,10 @@ app.get('/api/offices/:id/export.csv', anyUser, (req, res) => {
   }
 });
 
-app.get('/api/lines/search', anyUser, (req, res) => {
+app.get('/api/lines/search', anyUser, async (req, res) => {
   try {
     res.json(
-      searchLines({
+      await searchLines({
         q: req.query.q || '',
         page: req.query.page,
         limit: req.query.limit,
@@ -383,10 +382,10 @@ app.get('/api/lines/search', anyUser, (req, res) => {
   }
 });
 
-app.get('/api/lines/:phone', anyUser, (req, res) => {
+app.get('/api/lines/:phone', anyUser, async (req, res) => {
   try {
     const phone = normalizePhone(req.params.phone);
-    const line = getLineDetail(phone);
+    const line = await getLineDetail(phone);
     if (!line) return res.status(404).json({ error: 'الخط غير موجود' });
     res.json(line);
   } catch (err) {
@@ -521,7 +520,22 @@ app.post('/api/import/asia-local', adminOnly, async (_req, res) => {
 });
 
 const PORT = process.env.PORT || 3847;
-app.listen(PORT, () => {
-  console.log(`AsiePay Office Tracker on http://localhost:${PORT}`);
-  console.log(`SQLite: ${DB_PATH}`);
+
+async function start() {
+  await getDb();
+  const adminSeed = await ensureDefaultAdmin();
+  if (adminSeed.created) {
+    console.log(
+      `Default admin created → username: ${DEFAULT_ADMIN.username} / password: ${DEFAULT_ADMIN.password}`
+    );
+  }
+  app.listen(PORT, () => {
+    console.log(`AsiePay Office Tracker on http://localhost:${PORT}`);
+    console.log(`DB: ${DB_PATH} (driver=${process.env.DB_DRIVER || 'mariadb'})`);
+  });
+}
+
+start().catch((err) => {
+  console.error('Failed to start:', err.message || err);
+  process.exit(1);
 });

@@ -1,12 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { parse } = require('csv-parse');
-const {
-  getDb,
-  createBatch,
-  finishBatch,
-  applyAsiaActivation,
-} = require('./db');
+const { createBatch, finishBatch, applyAsiaActivation } = require('./db');
 const { normalizePhone } = require('./phone');
 
 function cleanDate(value) {
@@ -20,7 +15,7 @@ function cleanDate(value) {
  * Import Asia activation CSV and match by phone.
  */
 async function importAsiaFile(filePath, { onProgress } = {}) {
-  const batchId = createBatch({
+  const batchId = await createBatch({
     type: 'asia',
     sourceFile: path.basename(filePath),
   });
@@ -30,8 +25,6 @@ async function importAsiaFile(filePath, { onProgress } = {}) {
   let activated = 0;
   let orphans = 0;
   let skipped = 0;
-
-  const runApply = getDb().transaction((payload) => applyAsiaActivation(payload));
 
   await new Promise((resolve, reject) => {
     const parser = fs.createReadStream(filePath).pipe(
@@ -50,30 +43,39 @@ async function importAsiaFile(filePath, { onProgress } = {}) {
     );
 
     parser.on('data', (row) => {
-      rowsRead += 1;
-      const phone = normalizePhone(row.SUB_MSISDN);
-      if (!phone) {
-        skipped += 1;
-        return;
-      }
+      parser.pause();
+      (async () => {
+        try {
+          rowsRead += 1;
+          const phone = normalizePhone(row.SUB_MSISDN);
+          if (!phone) {
+            skipped += 1;
+            parser.resume();
+            return;
+          }
 
-      const result = runApply({
-        phone,
-        activationDate: cleanDate(row.ACTIVATION_DT),
-        bundleName: row.BUNDLE_NAME || '',
-        bundleRevenue: row.ALL_BUN_REVN || '',
-        typeOfProd: row.TYPE_OF_PROD || '',
-        dealerMsisdn: row.DEALER_MSISDN || '',
-        batchId,
-      });
+          const result = await applyAsiaActivation({
+            phone,
+            activationDate: cleanDate(row.ACTIVATION_DT),
+            bundleName: row.BUNDLE_NAME || '',
+            bundleRevenue: row.ALL_BUN_REVN || '',
+            typeOfProd: row.TYPE_OF_PROD || '',
+            dealerMsisdn: row.DEALER_MSISDN || '',
+            batchId,
+          });
 
-      upserted += 1;
-      if (result.orphan) orphans += 1;
-      if (result.activated) activated += 1;
+          upserted += 1;
+          if (result.orphan) orphans += 1;
+          if (result.activated) activated += 1;
 
-      if (onProgress && upserted % 1000 === 0) {
-        onProgress({ stage: 'asia', upserted, activated, orphans });
-      }
+          if (onProgress && upserted % 1000 === 0) {
+            onProgress({ stage: 'asia', upserted, activated, orphans });
+          }
+          parser.resume();
+        } catch (err) {
+          reject(err);
+        }
+      })();
     });
 
     parser.on('error', reject);
@@ -88,7 +90,7 @@ async function importAsiaFile(filePath, { onProgress } = {}) {
     offices_touched: 0,
     notes: `skipped=${skipped}`,
   };
-  finishBatch(batchId, stats);
+  await finishBatch(batchId, stats);
 
   return {
     batchId,

@@ -177,7 +177,10 @@ function showView(name) {
   if (name === "offices") loadOffices(1);
   if (name === "reps") loadReps(1);
   if (name === "numbers") loadNumbers(1);
-  if (name === "requests") loadRequests(1);
+  if (name === "requests") {
+    loadRequests(1);
+    if (currentUser?.role === "rep") initOfficeCombo();
+  }
 }
 
 async function loadHome() {
@@ -382,6 +385,100 @@ function requestStatusLabel(s) {
   );
 }
 
+let officeComboTimer = null;
+let officeComboItems = [];
+let officeComboSelected = "";
+let officeComboReady = false;
+
+function initOfficeCombo() {
+  const input = $("reqOffice");
+  const list = $("reqOfficeList");
+  if (!input || !list || officeComboReady) return;
+  officeComboReady = true;
+
+  const openList = () => {
+    list.hidden = false;
+    input.setAttribute("aria-expanded", "true");
+  };
+  const closeList = () => {
+    list.hidden = true;
+    input.setAttribute("aria-expanded", "false");
+  };
+
+  const renderList = (rows, q) => {
+    officeComboItems = rows || [];
+    if (!officeComboItems.length) {
+      list.innerHTML = `<li class="empty-opt">${q ? "لا مكاتب مطابقة" : "اكتب للبحث عن مكتب"}</li>`;
+      openList();
+      return;
+    }
+    list.innerHTML = officeComboItems
+      .map(
+        (o, i) =>
+          `<li role="option" data-idx="${i}" data-name="${escapeHtml(o.name)}">${escapeHtml(o.name)}</li>`
+      )
+      .join("");
+    openList();
+  };
+
+  const searchOffices = async (q) => {
+    const params = new URLSearchParams({
+      q: q || "",
+      page: "1",
+      limit: "40",
+    });
+    const { res, data } = await api(`/api/offices?${params}`);
+    if (!res.ok) {
+      list.innerHTML = `<li class="empty-opt">تعذر تحميل المكاتب</li>`;
+      openList();
+      return;
+    }
+    renderList(data.offices || [], q);
+  };
+
+  const selectOffice = (name) => {
+    officeComboSelected = name;
+    input.value = name;
+    input.dataset.selected = name;
+    closeList();
+  };
+
+  input.addEventListener("focus", () => {
+    searchOffices(input.value.trim()).catch(() => {});
+  });
+
+  input.addEventListener("input", () => {
+    officeComboSelected = "";
+    input.dataset.selected = "";
+    clearTimeout(officeComboTimer);
+    officeComboTimer = setTimeout(() => {
+      searchOffices(input.value.trim()).catch(() => {});
+    }, 200);
+  });
+
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      closeList();
+      return;
+    }
+    if (e.key === "Enter" && !list.hidden && officeComboItems.length) {
+      e.preventDefault();
+      selectOffice(officeComboItems[0].name);
+    }
+  });
+
+  list.addEventListener("mousedown", (e) => {
+    const li = e.target.closest("li[data-name]");
+    if (!li) return;
+    e.preventDefault();
+    selectOffice(li.dataset.name);
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest("#reqOfficeCombo")) closeList();
+  });
+}
+
 async function loadRequests(page = 1) {
   requestsPage = page;
   const status = $("requestsStatus")?.value || "all";
@@ -583,16 +680,30 @@ repsBody.addEventListener("click", async (e) => {
 
 $("requestForm")?.addEventListener("submit", async (e) => {
   e.preventDefault();
+  const officeName = ($("reqOffice")?.dataset.selected || $("reqOffice")?.value || "").trim();
+  if (!officeName) {
+    alert("اختر مكتباً من القائمة");
+    $("reqOffice")?.focus();
+    return;
+  }
+  // Must pick from list when options were shown
+  if ($("reqOffice")?.dataset.selected !== officeName) {
+    alert("اختر المكتب من نتائج البحث (لا تكتب اسماً يدوياً)");
+    $("reqOffice")?.focus();
+    return;
+  }
   const { res, data } = await api("/api/prep-requests", {
     method: "POST",
     body: JSON.stringify({
-      office_name: $("reqOffice").value,
+      office_name: officeName,
       quantity: $("reqQty").value,
       note: $("reqNote").value,
     }),
   });
   if (!res.ok) return alert(data.error || "فشل إرسال الطلب");
   e.target.reset();
+  officeComboSelected = "";
+  if ($("reqOffice")) $("reqOffice").dataset.selected = "";
   loadRequests(1);
 });
 

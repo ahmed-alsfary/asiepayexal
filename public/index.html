@@ -197,8 +197,20 @@
 
         <section class="panel rep-only" id="requestCreatePanel">
           <h2>طلب تجهيز جديد</h2>
-          <form id="requestForm" class="form-grid">
-            <input id="reqOffice" required placeholder="اسم المكتب / نقطة البيع *" />
+          <form id="requestForm" class="form-grid request-form">
+            <div class="office-combo" id="reqOfficeCombo">
+              <input
+                id="reqOffice"
+                type="search"
+                required
+                autocomplete="off"
+                placeholder="ابحث واختر المكتب *"
+                aria-autocomplete="list"
+                aria-controls="reqOfficeList"
+                aria-expanded="false"
+              />
+              <ul id="reqOfficeList" class="office-combo-list" role="listbox" hidden></ul>
+            </div>
             <input id="reqQty" required type="number" min="1" placeholder="عدد الخطوط *" />
             <input id="reqNote" placeholder="ملاحظة" />
             <button class="btn primary" type="submit">إرسال الطلب</button>

@@ -37,9 +37,9 @@ async function main() {
     console.log('Asia file missing, skip');
   }
 
-  console.log('stats', getDbStats());
-  console.log('top offices', listOffices({ limit: 5 }).offices);
-  closeDb();
+  console.log('stats', await getDbStats());
+  console.log('top offices', (await listOffices({ limit: 5 })).offices);
+  await closeDb();
 }
 
 main().catch((err) => {
