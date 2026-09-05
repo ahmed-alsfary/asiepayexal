@@ -184,6 +184,10 @@ body {
   padding: 1.5rem;
 }
 
+.login-screen[hidden] {
+  display: none !important;
+}
+
 .login-card {
   width: min(420px, 100%);
   display: grid;

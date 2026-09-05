@@ -17,7 +17,8 @@ async function api(url, options = {}) {
   } catch {
     data = null;
   }
-  if (res.status === 401) {
+  // Don't force-logout on the login endpoint itself (wrong password = 401)
+  if (res.status === 401 && !String(url).includes("/api/auth/login")) {
     showLogin();
     throw new Error(data?.error || "يجب تسجيل الدخول");
   }
@@ -638,20 +639,29 @@ $("busyClose")?.addEventListener("click", () => {
 $("loginForm")?.addEventListener("submit", async (e) => {
   e.preventDefault();
   const errEl = $("loginError");
+  const btn = e.target.querySelector('button[type="submit"]');
   errEl.hidden = true;
-  const { res, data } = await api("/api/auth/login", {
-    method: "POST",
-    body: JSON.stringify({
-      username: $("loginUser").value,
-      password: $("loginPass").value,
-    }),
-  });
-  if (!res.ok) {
+  if (btn) btn.disabled = true;
+  try {
+    const { res, data } = await api("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({
+        username: $("loginUser").value,
+        password: $("loginPass").value,
+      }),
+    });
+    if (!res.ok) {
+      errEl.hidden = false;
+      errEl.textContent = data?.error || "فشل الدخول";
+      return;
+    }
+    showApp(data.user);
+  } catch (err) {
     errEl.hidden = false;
-    errEl.textContent = data?.error || "فشل الدخول";
-    return;
+    errEl.textContent = err.message || "فشل الدخول";
+  } finally {
+    if (btn) btn.disabled = false;
   }
-  showApp(data.user);
 });
 
 $("logoutBtn")?.addEventListener("click", async () => {
